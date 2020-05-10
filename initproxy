@@ -1,0 +1,140 @@
+#!/bin/bash
+
+if (( $(id -u) != 0  )); then
+    echo "Command must be run as root! (this is necessary to install the Squid proxy service)."
+    exit 0
+fi
+
+HELP=0
+IP_FILENAME=""
+PORT=80
+YES=0
+OPEN=0
+while getopts hoyf:p: opt
+do
+case "${opt}"
+in
+h) HELP=1;;
+f) IP_FILENAME=${OPTARG};;
+p) PORT=${OPTARG};;
+o) OPEN=1;;
+y) YES=1;;
+esac
+done
+
+if (( $HELP == 1 )); then
+    echo ""
+    echo "To create a proxy server accessible from one IP:"
+    echo "    sudo ./initproxy xxx.xxx.xxx.xxx"
+    echo ""
+    echo "To create a proxy server accessible from several IPs:"
+    echo "    sudo ./initproxy xxx.xxx.xxx.xxx yyy.yyy.yyy.yyy zzz.zzz.zzz.zzz"
+    echo ""
+    echo "To create a proxy server accessible from all IPs in a file:"
+    echo "    sudo ./initproxy -f filename.txt"
+    echo ""
+    echo "To do any of the above on a different port:"
+    echo "    sudo ./initproxy -f filename.txt -p 1330"
+    echo ""
+    echo "To do any of the above, but automatically confirm your port choice"
+    echo "    sudo ./initproxy -y -p 1330 xxx.xxx.xxx.xxx"
+    echo ""
+    exit 0
+fi
+
+IPS=""
+IPS_FOUND=0
+if [[ $IP_FILENAME == "" ]]; then
+    for ip in "$@"
+    do
+        if [[ $ip =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])$ ]]; then
+            IPS="${IPS} ${ip}/255.255.255.255"
+            ((IPS_FOUND++))
+        fi
+    done
+else
+    while X="" read -r p || [ -n "$p" ]
+    do
+        if [[ $p =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])$ ]]; then
+            IPS="${IPS} ${p}/255.255.255.255"
+            ((IPS_FOUND++))
+        fi
+    done < "${IP_FILENAME}"
+fi
+
+if (( $OPEN == 1 )) && (( $YES == 0 )); then
+    echo "[WARNING] Running an open proxy means that anyone who has your server's IP can use your proxy."
+    echo "However, it is currently necessary if you want to use this proxy from anywhere on mobile."
+    echo "Proceed with open proxy? [Y/n]"
+    read cont
+    if [[ "${cont}" == "n" ]] || [[ "${cont}" == "N" ]]; then
+        echo ""
+        echo "Reverting to closed proxy."
+        echo ""
+        OPEN=0
+    else
+        echo ""
+        echo "Creating an open proxy."
+        echo "(you can run this command with -y to skip that dialogue in the future)"
+        echo ""
+    fi
+fi
+
+if (( $IPS_FOUND == 0 )) && (( $OPEN == 0 )); then
+    echo "Must supply at least one IP address that can connect to this proxy!"
+    echo "    sudo ./initproxy 74.208.236.70 104.236.181.76"
+    echo "    sudo ./initproxy -f file_with_one_ip_per_line.txt"
+    exit 0
+fi
+
+if (( $PORT != 80  )) && (( $PORT != 443 )) && (( $YES == 0 )); then
+    echo "[WARNING] Running on ports besidse 80 (and 443) won't work unless you open those ports via Google Cloud firewall rules."
+    echo "Are you sure you want to use this port? [Y/n]"
+    read cont
+    if [[ "${cont}" == "n" ]] || [[ "${cont}" == "N" ]]; then
+        echo ""
+        echo "Reverting proxy to port 80."
+        echo ""
+        PORT=80
+    else
+        echo ""
+        echo "Continuing with port ${PORT}"
+        echo "(you can run this command with -y to skip that dialogue in the future)"
+        echo ""
+    fi
+fi
+
+echo "Adding user to manage proxy..."
+USER_PWD=$(cat /dev/urandom | tr -cd "a-zA-Z0-9" | fold -w 32 | head -n 1)
+CURRENT_DIR=$(dirname $(readlink -f $0))
+echo "${USER_PWD}" > "${CURRENT_DIR}/pwd.txt"
+echo "$\n\n\n\n\n\nY\n" | adduser --disabled-password --quiet squid
+echo "squid:${USER_PWD}" | chpasswd
+usermod -aG sudo squid
+echo "User added."
+
+echo "Updating package lists..."
+apt-get -qq update
+apt-get -qq upgrade
+echo "Package lists updtaed."
+
+echo "Installing Squid proxy service..."
+apt-get -qq install squid
+echo "Installed Squid proxy service."
+
+echo "Adding IPs to config and changing port to ${PORT}..."
+sed -i "1612s#.*#http_port ${PORT}#" /etc/squid/squid.conf
+
+if (( $OPEN == 1 )); then
+    sed -i "1194s#.*#http_access allow all#" /etc/squid/squid.conf
+else
+    sed -i "980s#.*#acl default src${IPS}#" /etc/squid/squid.conf
+    sed -i "1192s#.*#http_access allow default#" /etc/squid/squid.conf
+fi
+echo "Finished updating config file."
+
+echo "Starting proxy service (this may take some time)..."
+systemctl restart squid
+echo "Proxy service is running on port ${PORT}."
+echo " "
+echo "New user (squid)'s password is ${USER_PWD} (stored in ${CURRENT_DIR}/pwd.txt)"
