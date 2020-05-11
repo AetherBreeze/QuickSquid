@@ -31,7 +31,7 @@ This can be done in multiple ways. A few of the more convenient are listed below
   apt install git -y
   git fetch https://github.com/CocoPommel/QuickSquid
   ```
-  2) **File transfer/SCP** Download the file onto your own machine, then SCP to your server (or use Google Cloud's convenient file transfer utility)[https://cloud.google.com/compute/docs/instances/transfer-files#transferbrowser]
+  2) **File transfer/SCP** Download the file onto your own machine, then SCP to your server [or use Google Cloud's convenient file transfer utility](https://cloud.google.com/compute/docs/instances/transfer-files#transferbrowser)
   3) **Copy and paste (the caveman method)** Copy the text in `initproxy`, paste it in a file using your text editor of choice, and make the file executable:
   ```
   nano initproxy
