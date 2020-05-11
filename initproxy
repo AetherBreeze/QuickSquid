@@ -33,6 +33,9 @@ if (( $HELP == 1 )); then
     echo "To create a proxy server accessible from all IPs in a file:"
     echo "    sudo ./initproxy -f filename.txt"
     echo ""
+    echo "To create a proxy server accessible from any IP:"
+    echo "    sudo ./initproxy -o"
+    echo ""
     echo "To do any of the above on a different port:"
     echo "    sudo ./initproxy -f filename.txt -p 1330"
     echo ""
@@ -84,6 +87,7 @@ if (( $IPS_FOUND == 0 )) && (( $OPEN == 0 )); then
     echo "Must supply at least one IP address that can connect to this proxy!"
     echo "    sudo ./initproxy 74.208.236.70 104.236.181.76"
     echo "    sudo ./initproxy -f file_with_one_ip_per_line.txt"
+    echo "    sudo ./initproxy -o"
     exit 0
 fi
 
